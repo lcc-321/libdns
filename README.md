@@ -1,4 +1,4 @@
-# lib_dns [![Build Status](https://app.travis-ci.com/lccxz/lib_dns.svg?branch=main)](https://app.travis-ci.com/lccxz/lib_dns)
+# lib_dns [![Build Status](https://app.travis-ci.com/lcc-321/libdns.svg?branch=main)](https://app.travis-ci.com/lcc-321/libdns)
 a tiny DNS client library asynchronously(use epoll or kqueue) for C++ (especially in docker alpine)
 
 ## How to start
