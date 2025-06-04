@@ -6,7 +6,7 @@ a tiny DNS client library asynchronously(use epoll or kqueue) for C++ (especiall
 # Clone this project
 git clone --recurse-submodules https://github.com/lcc-321/libdns.git
 
-# Enter this project & update submodule
+# Enter this project
 cd libdns
 
 # Configure
