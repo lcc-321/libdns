@@ -1,17 +1,17 @@
-// created by lccc 12/19/2021, no copyright
+// created by lcc 12/19/2021
 
-#include "libdns/client.h"
+#include "lib_dns/client.h"
 
 int main() {
-  if ("0.1" != libdns::VERSION) {
+  if ("0.1" != lib_dns::VERSION) {
     return 1;
   }
 
   bool stop = false;
 
-  libdns::Client client;
+  lib_dns::Client client;
 
-  client.query("one.one.one.one", libdns::RRS.at("A"), [&stop](const std::vector<std::string>& data) {
+  client.query("one.one.one.one", lib_dns::RRS.at("A"), [&stop](const std::vector<std::string>& data) {
     stop = true;
 
     bool found = false;

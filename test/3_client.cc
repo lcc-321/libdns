@@ -1,11 +1,9 @@
-// created by lccc 12/20/2021, no copyright
+// created by lcc 12/20/2021
 
-#include "libdns/client.h"
+#include "lib_dns/client.h"
 
 int main() {
-  libdns::Client client;
+  lib_dns::Client client;
 
-  for (int i = 0; i < 9; i++) {
-    client.receive();
-  }
+  client.receive(1);
 }

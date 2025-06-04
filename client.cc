@@ -1,80 +1,110 @@
-// created by lccc 12/16/2021, no copyright
+// created by lcc 12/16/2021
 
-#include "libdns/client.h"
+#include "lib_dns/client.h"
 
 #include "rapidjson/document.h"
 
 #include <iostream>
-#include <utility>
 #include <regex>
+#include <sstream>
 
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 
+#ifdef __linux__
+  #include <sys/epoll.h>
+#else
+  #include <sys/event.h>
+#endif
+
 const std::vector<std::string> HEX_CODES = { "0","1","2","3","4","5","6","7","8","9","A","B","C","D","E","F" };
 const std::map<std::int32_t, std::string> AF_MAP = { { AF_INET, "IPv4" }, { AF_INET6, "IPv6"} };
 
-int connect_sock(int epollfd, int sockfd, const struct sockaddr *sock_addr, std::size_t sock_addr_len) {
-  if (connect(sockfd, sock_addr, sock_addr_len) == -1) {
-    std::cerr << "socket connect error" << std::endl;
-    epoll_ctl(epollfd, EPOLL_CTL_DEL, sockfd, nullptr);
-    close(sockfd);
+int connect_sock(int event_fd, int sock_fd, const sockaddr *sock_addr, const std::size_t sock_addr_len) {
+  if (connect(sock_fd, sock_addr, sock_addr_len) == -1) {
+    std::cerr << "socket connect error: " << sock_addr->sa_data << std::endl;
+#ifdef __linux__
+  epoll_ctl(event_fd, EPOLL_CTL_DEL, sock_fd, nullptr);
+#endif
+    close(event_fd);
+    close(sock_fd);
     return -1;
   }
-  return sockfd;
+  return sock_fd;
 }
 
-int connect_ip(int epollfd, std::int32_t af, const std::string& ip_addr, int port) {
-  int sockfd;
-  if ((sockfd = socket(af, SOCK_STREAM, IPPROTO_TCP)) == -1) {
-    std::cerr << AF_MAP.at(af) << " socket create error" << std::endl;
+int connect_ip(int event_fd, const std::int32_t af_type, const std::string& ip_addr, int port) {
+  int sock_fd;
+  if ((sock_fd = socket(af_type, SOCK_STREAM, IPPROTO_TCP)) == -1) {
+    std::cerr << AF_MAP.at(af_type) << " socket create error" << std::endl;
     return -1;
   }
+
+#ifdef __linux__
   struct epoll_event event{};
   event.events = EPOLLIN;
-  event.data.fd = sockfd;
-  if (epoll_ctl(epollfd, EPOLL_CTL_ADD, sockfd, &event) == -1) {
+  event.data.fd = sock_fd;
+  if (epoll_ctl(event_fd, EPOLL_CTL_ADD, sock_fd, &event) == -1) {
     std::cerr << "epoll ctl add error" << std::endl;
-    close(sockfd);
+    close(sock_fd);
     return -1;
   }
-  if (af == AF_INET) {
-    struct sockaddr_in sock_addr_v4{};
-    sock_addr_v4.sin_family = af;
-    sock_addr_v4.sin_port = htons(port);
-    inet_pton(af, ip_addr.c_str(), &sock_addr_v4.sin_addr);
-    std::size_t sock_addr_len = sizeof(sock_addr_v4);
-    return connect_sock(epollfd, sockfd, (struct sockaddr *) (&sock_addr_v4), sock_addr_len);
-  } else if (af == AF_INET6) {
-    struct sockaddr_in6 sock_addr_v6{};
-    sock_addr_v6.sin6_family = af;
-    sock_addr_v6.sin6_port = htons(port);
-    inet_pton(af, ip_addr.c_str(), &sock_addr_v6.sin6_addr);
-    std::size_t sock_addr_len = sizeof(sock_addr_v6);
-    return connect_sock(epollfd, sockfd, (struct sockaddr *) (&sock_addr_v6), sock_addr_len);
+#else
+  struct kevent event { };
+  event.ident = sock_fd;
+  EV_SET(&event, sock_fd, EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, NULL);
+  if (kevent(event_fd, &event, 1, nullptr, 0, nullptr) == -1) {
+    std::cerr << "kevent add error" << std::endl;
+    close(sock_fd);
+    close(event_fd);
+    return -1;
+  }
+#endif
+
+  sockaddr_storage sock_addr_storage{};
+  auto* sock_addr = reinterpret_cast<sockaddr*>(&sock_addr_storage);
+  socklen_t sock_addr_len;
+  if (af_type == AF_INET6) {
+    auto* sin6 = reinterpret_cast<sockaddr_in6*>(sock_addr);
+    sin6->sin6_family = af_type;
+    sin6->sin6_port = htons(port);
+    inet_pton(af_type, ip_addr.c_str(), &sin6->sin6_addr);
+    sock_addr_len = sizeof(sockaddr_in6);
+  } else {
+    auto* sin = reinterpret_cast<sockaddr_in*>(sock_addr);
+    sin->sin_family = af_type;
+    sin->sin_port = htons(port);
+    inet_pton(af_type, ip_addr.c_str(), &sin->sin_addr);
+    sock_addr_len = sizeof(sockaddr_in);
   }
 
-  epoll_ctl(epollfd, EPOLL_CTL_DEL, sockfd, &event);
-  close(sockfd);
-  return -1;
+  return connect_sock(event_fd, sock_fd, sock_addr, sock_addr_len);
 }
 
-libdns::Client::Client(std::int8_t log_verbosity_level) {
-  epollfd = epoll_create1(0);
+lib_dns::Client::Client(const std::int8_t log_verbosity_level) {
+#ifdef __linux__
+  event_fd = epoll_create1(0);
+#else
+  event_fd = kqueue();
+#endif
 
-  SSL_library_init();
-  SSLeay_add_ssl_algorithms();
-  SSL_load_error_strings();
+  OPENSSL_init_ssl(OPENSSL_INIT_LOAD_SSL_STRINGS | OPENSSL_INIT_LOAD_CRYPTO_STRINGS, nullptr);
   ssl_ctx = SSL_CTX_new(TLS_client_method());
 
   this->log_verbosity_level = log_verbosity_level;
 }
 
-void libdns::Client::send_https_request(std::int32_t af, const std::string& ip, const std::string& host, const std::string& path, const callback_t& f) {
-  int sockfd;
-  if ((sockfd = connect_ip(epollfd, af, ip, 443)) == -1) {
-    std::cerr << "connect error" << std::endl;
+void lib_dns::Client::send_https_request(
+    const std::int32_t af_type,
+    const std::string& ip,
+    const std::string& host,
+    const std::string& path,
+    const callback_t& f)
+{
+  int sock_fd;
+  if ((sock_fd = connect_ip(event_fd, af_type, ip, 443)) == -1) {
+    std::cerr << "connect error: " << event_fd << ", " << af_type << ", " << ip << std::endl;
     return;
   }
 
@@ -84,55 +114,56 @@ void libdns::Client::send_https_request(std::int32_t af, const std::string& ip, 
       std::cerr << "Error creating SSL." << std::endl;
       break;
     }
-    if (SSL_set_fd(ssl, sockfd) == 0) {
+    if (SSL_set_fd(ssl, sock_fd) == 0) {
       std::cerr << "Error to set fd." << std::endl;
       break;
     }
-    int err = SSL_connect(ssl);
-    if (err <= 0) {
+    if (const int err = SSL_connect(ssl); err <= 0) {
       std::cerr << "Error creating SSL connection. err = " << err << std::endl;
       break;
     }
     if (log_verbosity_level > 0) {
-      std::cout << "SSL connection using " << SSL_get_cipher(ssl) << std::endl;
+      std::cout << "SSL connection using: " << sock_fd << ", " << SSL_get_cipher(ssl) << std::endl;
     }
 
     std::stringstream req;
     req << "GET " << path << " HTTP/1.1\r\n";
     req << "Host: " << host << "\r\n";
-    req << "User-Agent: libdns/" << VERSION << "\r\n";
+    req << "User-Agent: lib_dns/" << VERSION << "\r\n";
     req << "Accept: */*\r\n";
     req << "\r\n";
 
-    auto data = req.str();
+    const auto data = req.str();
+    if (log_verbosity_level > 0) {
+      std::cout << "HTTPS request: " << sock_fd << ", " << ip << ": " << data << std::endl;
+    }
     if (SSL_write(ssl, data.c_str(), data.length()) < 0) {  // NOLINT(cppcoreguidelines-narrowing-conversions)
       break;
     }
 
-    if (log_verbosity_level > 0) {
-      std::cout << "HTTPS request " << ip << ": " << data << std::endl;
-    }
-    callbacks[sockfd] = f;
-    ssls[sockfd] = ssl;
+    callbacks[sock_fd] = f;
+    ssls[sock_fd] = ssl;
     return;
   } while (false);  // NOLINT
 
-  epoll_ctl(epollfd, EPOLL_CTL_DEL, sockfd, nullptr);
-  close(sockfd);
+#ifdef __linux__
+  epoll_ctl(event_fd, EPOLL_CTL_DEL, sock_fd, nullptr);
+#endif
+  close(event_fd);
+  close(sock_fd);
   SSL_free(ssl);
 }
 
-void libdns::Client::query(const std::string& name, std::uint16_t type, const std::function<void(std::vector<std::string>)>& f) {
-  std::int32_t af = LIBDNS_WITH_IPV6 ? AF_INET6 : AF_INET;
-  std::string query = "/resolve?name=" + name + "&type=" + std::to_string(type);
+void lib_dns::Client::query(const std::string& name, std::uint16_t type, const std::function<void(std::vector<std::string>)>& f) {
+  constexpr std::int32_t af = LIB_DNS_WITH_IPV6 ? AF_INET6 : AF_INET;
+  const std::string query = "/resolve?name=" + name + "&type=" + std::to_string(type);
   send_https_request(af, SERVER, "dns.google", query, [type, f](std::vector<std::vector<char>> res) {
     std::vector<std::string> result;
     rapidjson::Document data;
     data.Parse(std::string(res[1].begin(), res[1].end()).c_str());
     if (data["Status"].IsInt() && data["Status"].GetInt() == 0 && data["Answer"].IsArray()) {
       for (rapidjson::SizeType i = 0; i < data["Answer"].Size(); i++) {
-        const auto& row = data["Answer"][i].GetObject();
-        if (row["type"].GetInt() == type) {
+        if (const auto& row = data["Answer"][i].GetObject(); row["type"].GetInt() == type) {
           result.emplace_back(row["data"].GetString());
         }
       }
@@ -141,15 +172,28 @@ void libdns::Client::query(const std::string& name, std::uint16_t type, const st
   });
 }
 
-void libdns::Client::receive(std::int32_t timeout) {
-  if (epoll_wait(epollfd, events, MAX_EVENTS, timeout) > 0) {
+void lib_dns::Client::receive(std::int32_t timeout) {
+#ifdef __linux__
+  if (epoll_wait(event_fd, events, MAX_EVENTS, timeout) > 0) {
     process_ssl_response(events[0]);
   }
+#else
+  timespec timespecOut{};
+  timespecOut.tv_sec = timeout;
+  if (const int num_events = kevent(event_fd, nullptr, 0, events, MAX_EVENTS, &timespecOut); num_events > 0) {
+    process_ssl_response(events[0]);
+  }
+#endif
 }
 
-void libdns::Client::process_ssl_response(struct epoll_event event) {
-  int sockfd = event.data.fd;
-  SSL *ssl = ssls[sockfd];
+#ifdef __linux__
+void lib_dns::Client::process_ssl_response(struct epoll_event event) {
+  int sock_fd = event.data.fd;
+#else
+void lib_dns::Client::process_ssl_response(struct kevent event) {
+#endif
+  int sock_fd = static_cast<int>(event.ident);
+  SSL *ssl = ssls[sock_fd];
 
   std::vector<char> data;
   std::string head;
@@ -162,7 +206,7 @@ void libdns::Client::process_ssl_response(struct epoll_event event) {
   long blank_line_pos = -1;
   do {
     if ((response_size = SSL_read(ssl, buffer, HTTP_BUFFER_SIZE)) <= 0) {
-      std::cerr << "ssl read error: " << response_size << std::endl;
+      std::cerr << "ssl read error: " << response_size << ", fd: " << sock_fd << std::endl;
       break;
     }
     if (log_verbosity_level > 0) {
@@ -214,7 +258,7 @@ void libdns::Client::process_ssl_response(struct epoll_event event) {
   } while(true);
 
   if (log_verbosity_level > 0) {
-    std::cout << "ssl socket(" << sockfd << ") response: " << head << '\n' << std::endl;
+    std::cout << "ssl socket(" << sock_fd << ") response: " << head << '\n' << std::endl;
   }
 
   std::vector<char> body;
@@ -242,14 +286,18 @@ void libdns::Client::process_ssl_response(struct epoll_event event) {
     std::cout << std::string(body.begin(), body.end()) << std::endl;
   }
 
-  callbacks[sockfd]({ std::vector<char>(head.begin(), head.end()), body });
-  callbacks.erase(sockfd);
-  epoll_ctl(epollfd, EPOLL_CTL_DEL, sockfd, &event);
-  close(sockfd);
+  callbacks[sock_fd]({ std::vector<char>(head.begin(), head.end()), body });
+  callbacks.erase(sock_fd);
+
+#ifdef __linux__
+  epoll_ctl(event_fd, EPOLL_CTL_DEL, sock_fd, &event);
+#endif
+
+  close(sock_fd);
   SSL_free(ssl);
 }
 
-std::string libdns::urlencode(const std::string& str) {
+std::string lib_dns::url_encode(const std::string& str) {
   std::string encode;
 
   const char *s = str.c_str();
@@ -269,7 +317,7 @@ std::string libdns::urlencode(const std::string& str) {
   return encode;
 }
 
-std::string libdns::char_to_hex(char c) {
+std::string lib_dns::char_to_hex(char c) {
   std::uint8_t n = c;
   std::string res;
   res.append(HEX_CODES[n / 16]);

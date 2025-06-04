@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.11)
 
-project(libdns VERSION 0.1)
+project(lib_dns VERSION 0.1)
 
 option(WITH_TESTS "make with tests" ON)
 option(WITH_STATIC "link statically" OFF)
@@ -12,7 +12,8 @@ if (WITH_STATIC)
 endif()
 
 if (NOT LIBRESSL_ROOT_DIR)
-  set(LIBRESSL_ROOT_DIR ${PROJECT_BINARY_DIR}/lib/ssl/lib)
+  set(LIBRESSL_ROOT_DIR ${PROJECT_BINARY_DIR}/lib/ssl)
+  set(LIBRESSL_INCLUDE_DIR ${PROJECT_BINARY_DIR}/lib/ssl/include)
 endif()
 
 add_subdirectory(lib)
@@ -33,7 +34,7 @@ set(LIBRARIES Threads::Threads LibreSSL::SSL)
 set(INCLUDES include ${PROJECT_BINARY_DIR}/include)
 set(SOURCES client.cc)
 
-if (WITH_STATIC) # check: readelf -d build/tdscript
+if (WITH_STATIC) # check: readelf -d build/lib_dns_example
   add_library(${PROJECT_NAME} STATIC ${SOURCES})
   set(CMAKE_EXE_LINKER_FLAGS "-static -static-libgcc -static-libstdc++")
   set(LIBRARIES ${LIBRARIES} -static)

@@ -1,16 +1,16 @@
-// created by lccc 12/16/2021, no copyright
+// created by lcc 12/16/2021
 
-#include "libdns/client.h"
+#include "lib_dns/client.h"
 
 #include <cassert>
 #include <csignal>
 #include <iostream>
 
 bool stop;
-void quit(int signum) { stop = true; printf("received the signal: %d\n", signum); }
+void quit(const int signum) { stop = true; printf("received the signal: %d\n", signum); }
 
-int main(int argc, char **args) {
-  libdns::Client client;
+int main(const int argc, char **args) {
+  lib_dns::Client client;
 
   std::vector<std::pair<std::string, std::string>> params = {  // for test
       { "google.com", "AAAA" },
@@ -28,11 +28,11 @@ int main(int argc, char **args) {
     params[0].second = args[2];
   }
 
-  std::uint32_t done_check = 0;  // for test
+  std::uint32_t done_check;  // for test
 
   for (const auto& param : params) {
     // query & get callback
-    client.query(param.first, libdns::RRS.at(param.second), [params, param, &done_check](std::vector<std::string> data) {
+    client.query(param.first, lib_dns::RRS.at(param.second), [params, param, &done_check](const std::vector<std::string> &data) {
       assert(!data.empty());
       if (param.second == "AAAA") {
         assert(data[0].find(':') != std::string::npos);
@@ -54,7 +54,10 @@ int main(int argc, char **args) {
 
   signal(SIGINT, quit); // CTRL + C
 
-  while (!stop) {  // event loop
-    client.receive();
+  while (true) {  // event loop
+    client.receive(1);
+    if (stop) {
+      break;
+    }
   }
 }

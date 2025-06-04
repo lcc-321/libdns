@@ -1,3 +1,3 @@
 [submodule "lib/ssl"]
 	path = lib/ssl
-	url = https://github.com/lccxz/libressl.git
+	url = https://github.com/libressl/portable.git
