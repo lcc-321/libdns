@@ -4,11 +4,10 @@ a tiny DNS client library asynchronously(use epoll or kqueue) for C++ (especiall
 ## How to start
 ```
 # Clone this project
-git clone https://github.com/lcc-321/libdns.git
+git clone --recurse-submodules https://github.com/lcc-321/libdns.git
 
 # Enter this project & update submodule
-cd lib_dns
-git submodule update
+cd libdns
 
 # Configure
 cmake -G Ninja -S . -B build
