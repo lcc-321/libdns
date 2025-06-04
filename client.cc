@@ -191,8 +191,8 @@ void lib_dns::Client::process_ssl_response(struct epoll_event event) {
   int sock_fd = event.data.fd;
 #else
 void lib_dns::Client::process_ssl_response(struct kevent event) {
-#endif
   int sock_fd = static_cast<int>(event.ident);
+#endif
   SSL *ssl = ssls[sock_fd];
 
   std::vector<char> data;
