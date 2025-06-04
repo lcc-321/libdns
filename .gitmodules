@@ -1,3 +1,0 @@
-[submodule "lib/ssl"]
-	path = lib/ssl
-	url = https://github.com/libressl/portable.git
