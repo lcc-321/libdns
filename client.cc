@@ -48,6 +48,7 @@ int connect_ip(int event_fd, const std::int32_t af_type, const std::string& ip_a
   if (epoll_ctl(event_fd, EPOLL_CTL_ADD, sock_fd, &event) == -1) {
     std::cerr << "epoll ctl add error" << std::endl;
     close(sock_fd);
+    close(event_fd);
     return -1;
   }
 #else

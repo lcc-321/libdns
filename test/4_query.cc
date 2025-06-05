@@ -23,9 +23,9 @@ int main() {
 
     if (found) {
       exit(0);
-    } else {
-      exit(1);
     }
+
+    exit(1);
   });
 
   while (!stop) { client.receive(); }
