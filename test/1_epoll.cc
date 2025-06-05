@@ -99,9 +99,10 @@ int main() {
 
   // Wait for events
   struct kevent events[1];
-  timespec timespecOut { };
-  timespecOut.tv_sec = 1;
-  if (kevent(event_fd, nullptr, 0, events, 1, &timespecOut) > 0) {
+  timespec timeout { };
+  timeout.tv_sec = 0;
+  timeout.tv_nsec = 9999999;
+  if (kevent(event_fd, nullptr, 0, events, 1, &timeout) > 0) {
     assert(events[0].ident == fd);
     assert(events[0].filter == EVFILT_VNODE);
     assert(events[0].fflags & NOTE_DELETE);

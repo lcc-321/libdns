@@ -173,15 +173,16 @@ void lib_dns::Client::query(const std::string& name, std::uint16_t type, const s
   });
 }
 
-void lib_dns::Client::receive(std::int32_t timeout) {
+void lib_dns::Client::receive(const std::int64_t timeout_ms) {
 #ifdef __linux__
-  if (epoll_wait(event_fd, events, MAX_EVENTS, timeout) > 0) {
+  if (epoll_wait(event_fd, events, MAX_EVENTS, timeout_ms) > 0) {
     process_ssl_response(events[0]);
   }
 #else
-  timespec timespecOut{};
-  timespecOut.tv_sec = timeout;
-  if (const int num_events = kevent(event_fd, nullptr, 0, events, MAX_EVENTS, &timespecOut); num_events > 0) {
+  timespec timeout { };
+  timeout.tv_sec = timeout_ms / 1000;
+  timeout.tv_nsec = timeout_ms % 1000 * 1000000;
+  if (const int num_events = kevent(event_fd, nullptr, 0, events, MAX_EVENTS, &timeout); num_events > 0) {
     process_ssl_response(events[0]);
   }
 #endif

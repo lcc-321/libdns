@@ -73,9 +73,9 @@ namespace lib_dns {
     /**
      * Receive Server Response
      * you need to put this function to an "Event Loop"
-     * @param timeout the timeout expires. see https://man7.org/linux/man-pages/man2/epoll_wait.2.html
+     * @param timeout_ms the timeout expires. see https://man7.org/linux/man-pages/man2/epoll_wait.2.html
      */
-    void receive(std::int32_t timeout);
+    void receive(std::int64_t timeout_ms);
 
     void receive() { receive(0); };
 
