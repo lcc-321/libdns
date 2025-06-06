@@ -2,8 +2,6 @@
 
 #include "lib_dns/client.h"
 
-#include "rapidjson/document.h"
-
 #include <iostream>
 #include <regex>
 #include <sstream>
@@ -160,12 +158,14 @@ void lib_dns::Client::query(const std::string& name, std::uint16_t type, const s
   const std::string query = "/resolve?name=" + name + "&type=" + std::to_string(type);
   send_https_request(af, SERVER, "dns.google", query, [type, f](std::vector<std::vector<char>> res) {
     std::vector<std::string> result;
-    rapidjson::Document data;
-    data.Parse(std::string(res[1].begin(), res[1].end()).c_str());
-    if (data["Status"].IsInt() && data["Status"].GetInt() == 0 && data["Answer"].IsArray()) {
-      for (rapidjson::SizeType i = 0; i < data["Answer"].Size(); i++) {
-        if (const auto& row = data["Answer"][i].GetObject(); row["type"].GetInt() == type) {
-          result.emplace_back(row["data"].GetString());
+    if (auto data = json_parse(std::string(res[1].begin(), res[1].end()));
+      data.at_path("$.Answer").type() == simdjson::ondemand::json_type::array
+      && data.at_path("$.Status").type() == simdjson::ondemand::json_type::number
+      && data.at_path("$.Status").get_int64() == 0) {
+      for (auto answer : data.at_path("$.Answer").get_array()) {
+        if (answer["type"].get_int64() == type) {
+          std::string answer_data; answer["data"].get_string(answer_data);
+          result.emplace_back(answer_data);
         }
       }
     }
@@ -299,13 +299,20 @@ void lib_dns::Client::process_ssl_response(struct kevent event) {
   SSL_free(ssl);
 }
 
+simdjson::ondemand::parser lib_dns::Client::json_parser { };
+char lib_dns::Client::json_buff[json_buff_size] { };
+simdjson::simdjson_result<simdjson::ondemand::document> lib_dns::Client::json_parse(const std::string& json) {
+  strcpy(json_buff, json.c_str());
+  return json_parser.iterate(json_buff, json.length(), json_buff_size);
+}
+
 std::string lib_dns::url_encode(const std::string& str) {
   std::string encode;
 
   const char *s = str.c_str();
   for (int i = 0; s[i]; i++) {
-    char ci = s[i];
-    if ((ci >= 'a' && ci <= 'z') ||
+    if (const char ci = s[i];
+        (ci >= 'a' && ci <= 'z') ||
         (ci >= 'A' && ci <= 'Z') ||
         (ci >= '0' && ci <= '9') ) { // allowed
       encode.push_back(ci);
@@ -320,7 +327,7 @@ std::string lib_dns::url_encode(const std::string& str) {
 }
 
 std::string lib_dns::char_to_hex(char c) {
-  std::uint8_t n = c;
+  const std::uint8_t n = c;
   std::string res;
   res.append(HEX_CODES[n / 16]);
   res.append(HEX_CODES[n % 16]);

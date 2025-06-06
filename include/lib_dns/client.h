@@ -4,6 +4,7 @@
 #define INCLUDE_LIB_DNS_CLIENT_H_
 
 #include "lib_dns/config.h"
+#include "simdjson.h"
 
 #include <openssl/ssl.h>
 
@@ -77,7 +78,12 @@ namespace lib_dns {
      */
     void receive(std::int64_t timeout_ms);
 
-    void receive() { receive(0); };
+    void receive() { receive(0); }
+
+    static simdjson::ondemand::parser json_parser;
+    static constexpr int json_buff_size = 1 * 1024 * 1024;
+    static char json_buff[json_buff_size];
+    static simdjson::simdjson_result<simdjson::ondemand::document> json_parse(const std::string& json);
 
    private:
     static constexpr std::size_t HTTP_BUFFER_SIZE = 8192;

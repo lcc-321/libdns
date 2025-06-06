@@ -1,7 +1,7 @@
 // created by lcc 12/19/2021
 
 #include "lib_dns/client.h"
-#include "rapidjson/document.h"
+#include "simdjson.h"
 
 #include <cassert>
 #include <iostream>
@@ -10,6 +10,20 @@
 #include <arpa/inet.h>
 
 int main() {
+  auto doc = lib_dns::Client::json_parse(R"({"a": 1,"b":{"bb":"abc"},"c":[3,2,1]})");
+  assert(static_cast<int64_t>(doc.find_field("a")) == 1);
+  assert(static_cast<int64_t>(doc.at_path("$.a")) == 1);
+  assert(doc.at_path("$.b.bb").type() == simdjson::ondemand::json_type::string);
+  assert(doc.at_path("$.b.bb") == "abc");
+  std::string bb; doc.at_path("$.b.bb").get_string(bb);
+  assert(bb == "abc");
+  assert(doc.at_path("$.c").type() == simdjson::ondemand::json_type::array);
+  long sum = 0;
+  for (auto cc : doc.at_path("$.c").get_array()) {
+    sum += cc.get_int64();
+  }
+  assert(sum == 6);
+
   auto client = lib_dns::Client();
 
   auto rand_engine = std::mt19937((std::random_device())());
@@ -33,16 +47,15 @@ int main() {
     assert(!dns_data.empty());
     const std::string& ip = dns_data[0];
 
-    const std::string path = "/w/api.php?action=query&format=json&list=random&rnnamespace=0";
+    const std::string path = "/w/api.php?action=query&format=json&list=random&rn" "namespace=0";
     for (int i = 0; i < 9; i ++) {
       // get wikipedia random title
       client.send_https_request(AF_INET, ip, host, path, [&client, ip, host](std::vector<std::vector<char>> res) {
         const std::string body(res[1].begin(), res[1].end());
         assert(!body.empty());
-        rapidjson::Document data;
-        data.Parse(body.c_str());
-        assert(data["query"].IsObject() && data["query"]["random"].IsArray() && data["query"]["random"][0].IsObject());
-        const std::string title = data["query"]["random"][0]["title"].GetString();
+        auto data = lib_dns::Client::json_parse(body);
+        assert(data.at_path("$.query.random.0.title").type() == simdjson::ondemand::json_type::string);
+        std::string title; data.at_path("$.query.random.0.title").get_string(title);
         assert(!title.empty());
         std::cout << "Random title: " << title << '\n';
 
@@ -51,10 +64,9 @@ int main() {
         client.send_https_request(AF_INET, ip, host, pathP, [](std::vector<std::vector<char>> resP) {
           const std::string bodyP(resP[1].begin(), resP[1].end());
           assert(!bodyP.empty());
-          rapidjson::Document dataP;
-          dataP.Parse(bodyP.c_str());
-          assert(dataP["parse"].IsObject() && dataP["parse"]["text"].IsObject() && dataP["parse"]["text"]["*"].IsString());
-          const std::string textP = dataP["parse"]["text"]["*"].GetString();
+          auto dataP = lib_dns::Client::json_parse(bodyP);
+          assert(dataP.at_path("$.parse.text.*").type() == simdjson::ondemand::json_type::string);
+          std::string textP; dataP.at_path("$.parse.text.*").get_string(textP);
           assert(!textP.empty());
           // deal with article
         });
@@ -62,8 +74,7 @@ int main() {
     }
   });
 
-
-  for (int i = 0; i < 36; i++) { client.receive(9); }
+  for (int i = 0; i < 99; i++) { client.receive(9); }
 
   return 0;
 }
