@@ -35,7 +35,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 set(LIBRARIES Threads::Threads LibreSSL::SSL)
-set(INCLUDES include ${PROJECT_BINARY_DIR}/include)
+set(INCLUDES include lib ${PROJECT_BINARY_DIR}/include)
 set(SOURCES client.cc)
 
 if (WITH_STATIC) # check: readelf -d build/lib_dns_example
