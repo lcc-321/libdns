@@ -1,10 +1,12 @@
 cmake_minimum_required(VERSION 3.11)
 
-project(lib_dns VERSION 0.1)
+project(lib_dns VERSION 0.2.0)
 
 option(WITH_TESTS "make with tests" ON)
 option(WITH_STATIC "link statically" OFF)
 option(WITH_IPV6 "use IPv6 server address" OFF)
+
+string(TIMESTAMP CMAKE_BUILD_TIME "%Y-%m-%dT%H:%M:%SZ" UTC)
 
 if (WITH_STATIC)
   message(STATUS "${PROJECT_NAME} WITH STATIC")

@@ -1,10 +1,12 @@
-cmake_minimum_required(VERSION 3.11)
-
-project(lib_dns_lib VERSION 0.1)
-
+# Build libressl directly
 if (NOT EXISTS "${LIBRESSL_ROOT_DIR}/lib/libssl.a")
   execute_process(
-    COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" -S ${CMAKE_CURRENT_SOURCE_DIR}/ssl -B ${LIBRESSL_ROOT_DIR}-build -DCMAKE_INSTALL_PREFIX=${LIBRESSL_ROOT_DIR}
+    COMMAND ${CMAKE_COMMAND}
+          -G "${CMAKE_GENERATOR}"
+          -S ${CMAKE_CURRENT_SOURCE_DIR}/ssl
+          -B ${LIBRESSL_ROOT_DIR}-build
+          -DCMAKE_INSTALL_PREFIX=${LIBRESSL_ROOT_DIR}
+          -DCMAKE_BUILD_TYPE=Release
     RESULT_VARIABLE ret
   )
   if(${ret})
