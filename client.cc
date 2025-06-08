@@ -121,19 +121,19 @@ void lib_dns::Client::send_https_request(
       std::cerr << "Error creating SSL connection. err = " << err << std::endl;
       break;
     }
-    if (log_verbosity_level > 0) {
+    if (log_verbosity_level > 1) {
       std::cout << "SSL connection using: " << sock_fd << ", " << SSL_get_cipher(ssl) << std::endl;
     }
 
     std::stringstream req;
     req << "GET " << path << " HTTP/1.1\r\n";
     req << "Host: " << host << "\r\n";
-    req << "User-Agent: lib_dns/" << VERSION << "\r\n";
+    req << "User-Agent: lib_dns/" << VERSION << "-" << LIB_DNS_BUILD_TIME << "\r\n";
     req << "Accept: */*\r\n";
     req << "\r\n";
 
     const auto data = req.str();
-    if (log_verbosity_level > 0) {
+    if (log_verbosity_level > 1) {
       std::cout << "HTTPS request: " << sock_fd << ", " << ip << ": " << data << std::endl;
     }
     if (SSL_write(ssl, data.c_str(), data.length()) < 0) {  // NOLINT(cppcoreguidelines-narrowing-conversions)
@@ -156,7 +156,8 @@ void lib_dns::Client::send_https_request(
 void lib_dns::Client::query(const std::string& name, std::uint16_t type, const std::function<void(std::vector<std::string>)>& f) {
   constexpr std::int32_t af = LIB_DNS_WITH_IPV6 ? AF_INET6 : AF_INET;
   const std::string query = "/resolve?name=" + name + "&type=" + std::to_string(type);
-  send_https_request(af, SERVER, "dns.google", query, [type, f](std::vector<std::vector<char>> res) {
+  if (this->log_verbosity_level > 0) { std::cout << "query: " << "https:://" << SERVER << query << std::endl; }
+  send_https_request(af, SERVER, "dns.google", query, [this, type, f](std::vector<std::vector<char>> res) {
     std::vector<std::string> result;
     if (auto data = json_parse(std::string(res[1].begin(), res[1].end()));
       data.at_path("$.Answer").type() == simdjson::ondemand::json_type::array
@@ -237,8 +238,7 @@ void lib_dns::Client::process_ssl_response(struct kevent event) {
       }
 
       if (content_length == 0 && !chunked) {
-        std::smatch length_match;
-        if (std::regex_search(head, length_match, length_regex)) {
+        if (std::smatch length_match; std::regex_search(head, length_match, length_regex)) {
           content_length = std::stoull(length_match[1]);
         } else if (std::regex_search(head, chunked_regex)) {
           chunked = true;
@@ -259,7 +259,7 @@ void lib_dns::Client::process_ssl_response(struct kevent event) {
     }
   } while(true);
 
-  if (log_verbosity_level > 0) {
+  if (log_verbosity_level > 1) {
     std::cout << "ssl socket(" << sock_fd << ") response: " << head << '\n' << std::endl;
   }
 
@@ -284,11 +284,14 @@ void lib_dns::Client::process_ssl_response(struct kevent event) {
     body.insert(body.begin(), data.begin() + blank_line_pos + 4, data.end());
   }
 
-  if (log_verbosity_level > 0) {
-    std::cout << std::string(body.begin(), body.end()) << std::endl;
+  if (this->log_verbosity_level > 0) {
+    for (const auto& row : split(head, "\r\n")) {
+      std::cout << row << std::endl;
+    }
+    std::cout << "Response-Body: " << std::string(body.begin(), body.end()) << std::endl;
   }
 
-  callbacks[sock_fd]({ std::vector<char>(head.begin(), head.end()), body });
+  callbacks[sock_fd]({ std::vector(head.begin(), head.end()), body });
   callbacks.erase(sock_fd);
 
 #ifdef __linux__
@@ -332,4 +335,19 @@ std::string lib_dns::char_to_hex(char c) {
   res.append(HEX_CODES[n / 16]);
   res.append(HEX_CODES[n % 16]);
   return res;
+}
+
+std::vector<std::string> lib_dns::split(const std::string& str, const std::string& delimiter) {
+  std::vector<std::string> parts;
+  size_t prev_pos = 0;
+  size_t current_pos = str.find(delimiter, prev_pos);
+
+  while (current_pos != std::string::npos) {
+    parts.push_back(str.substr(prev_pos, current_pos - prev_pos));
+    prev_pos = current_pos + delimiter.length();
+    current_pos = str.find(delimiter, prev_pos);
+  }
+  // Add the last token (or the whole string if no delimiter was found)
+  parts.push_back(str.substr(prev_pos));
+  return parts;
 }

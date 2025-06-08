@@ -26,5 +26,5 @@ int main() {
     });
   });
 
-  for (int i = 0; i < 2; i++) { client.receive(9); }
+  for (int i = 0; i < 9; i++) { client.receive(9); }
 }

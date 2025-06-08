@@ -24,7 +24,7 @@ int main() {
   }
   assert(sum == 6);
 
-  auto client = lib_dns::Client();
+  auto client = lib_dns::Client(1);
 
   auto rand_engine = std::mt19937((std::random_device())());
 

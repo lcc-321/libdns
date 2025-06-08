@@ -78,7 +78,7 @@ namespace lib_dns {
      */
     void receive(std::int64_t timeout_ms);
 
-    void receive() { receive(0); }
+    void receive() { receive(999999); }
 
     static simdjson::ondemand::parser json_parser;
     static constexpr int json_buff_size = 1 * 1024 * 1024;
@@ -120,6 +120,7 @@ namespace lib_dns {
 
   std::string url_encode(const std::string& str);
   std::string char_to_hex(char c);
+  std::vector<std::string> split(const std::string& str, const std::string& delimiter);
 }
 
 #endif  // INCLUDE_LIB_DNS_CLIENT_H_
